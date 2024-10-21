@@ -83,11 +83,9 @@ def scipyBicubic(idx, data):
     x = np.arange(data.shape[1])
     y = np.arange(data.shape[0])
     interpolator = RegularGridInterpolator((y, x), data, method='cubic')
-    print(data.shape)
     plt.imshow(data)
     plt.show()
     interpolated_values = interpolator(np.array([[150.1,150.1]]))
-    print(interpolated_values)
     return interpolated_values
 
 def invertTransform(trans, corners, interpolator=cubicInterpol, size=None):
@@ -106,8 +104,6 @@ def invertTransform(trans, corners, interpolator=cubicInterpol, size=None):
             betrag(corners[0] - corners[2]))  # assumes square pattern
         size = int(max(sizey, sizex)) if size is None else size
         coordinates = np.zeros(shape=(size, size, 2))
-        XX = np.linspace(start=0, stop=norm_x[0], num=size)
-        XY = np.linspace(start=0, stop=norm_x[1], num=size)
         for i in range(size):
             x = norm_x * i / size
             for j in range(size):
@@ -139,14 +135,17 @@ def invertTransform(trans, corners, interpolator=cubicInterpol, size=None):
         points = np.zeros(shape=(size,size,2))
         for x in range(size):
             for y in range(size):
-                points[x,y] = corner1 + t[x]*v1 + t[y]*v2
-        return points
+                #points[y,x] = corner1 + t[x]*v1 + t[y]*v2
+                points[y,x] = corner1 + x/size*v1 + y/size*v2
+        #print("2:", coordinates[:2,:2])
+        #print(np.average(np.abs(coordinates - points)), "average difference in coordinates")
+        return coordinates
 
         # Calculate the points using vector addition and broadcasting
         #points = corners[0] + np.outer(u_grid.ravel(), v1) + np.outer(v_grid.ravel(), v2)
         #points = points.reshape(size, size, 2)
         #print(np.average(np.abs(coordinates - points)))
-        return points
+        #return points
 
     indizes = getCoordinateArray(size=size)
     if interpolator != scipyBicubic:

@@ -17,9 +17,9 @@ def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_n
         [0, 0, 1]
     ])
 
-    back = np.zeros(shape=(pattern.shape[0]*3, pattern.shape[1]*3, pattern.shape[2]))
-    back[pattern.shape[0]*1:pattern.shape[0]*2, pattern.shape[1]*1:pattern.shape[1]*2, :] = pattern
-    back = np.astype(back, np.uint8)
+    back = np.zeros(shape=(pattern.shape[0]*3, pattern.shape[1]*3))
+    back[pattern.shape[0]*1:pattern.shape[0]*2, pattern.shape[1]*1:pattern.shape[1]*2] = pattern
+    #back = np.astype(back, np.uint8)
     border = np.array([[pattern.shape[0]*1,pattern.shape[1]*1, 1], [pattern.shape[0]*2, pattern.shape[1]*1, 1],
                        [pattern.shape[0]*1, pattern.shape[1]*2, 1]]).T
 
@@ -29,56 +29,57 @@ def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_n
     matrix = np.linalg.inv(shift.params) @ rotation.params @ scale.params @ shift.params
     tform = transform.EuclideanTransform(matrix)
     back = transform.warp(back, tform.inverse, preserve_range=True, order=1)
-    back = np.astype(back, np.uint8)
+    #back = np.astype(back, np.uint8)
     border = tform.params @ border
     border = border[:-1, ...].T
     return back, border + (np.random.normal(scale=3, loc=0, size=border.shape) if add_noise else 0)
 
 
 size = 100
-k = 0
-
-
 
 
 #pattern = JapanPattern(size=size)
-pattern = getRandomFourier(size=size)
-pattern[:20, :20] = 0
-trans, corners = randomlyProjectPattern(pattern, max_inclination=np.pi/2.5, phi=(0.05, 0.05, 1.2), add_noise=False)
-pattern = pattern[..., 0]
-inverted = invertTransform(trans[..., 0], corners, size=size, interpolator= cubicInterpol)#lambda arr, y, x: SignalInterpol(arr, y, x, methode='hanning'))
+pattern, _ = getRandomFourier(size=size)
+trans, corners = randomlyProjectPattern(pattern, max_inclination=np.pi/2.5, phi=(0.05, 0.05, 1.2), add_noise=True)
+inverted = invertTransform(trans, corners, size=size, interpolator= cubicInterpol)#lambda arr, y, x: SignalInterpol(arr, y, x, methode='hanning'))
 
 print('original average: ', np.average(pattern))
 print('inverted average: ', np.average(inverted))
 inverted_fft = rfft2(inverted, norm='forward')
-inverted_fft[:10, :10] = 0
-inverted_fft = inverted_fft / np.max(np.abs(inverted_fft))
 pattern_fft = rfft2(pattern, norm='forward')
+inverted_fft[:10, :10] = 0
 pattern_fft[:10, :10] = 0
-pattern_fft = pattern_fft / np.max(np.abs(pattern_fft))
-
 pattern_fft = np.real(pattern_fft)
 inverted_fft = np.real(inverted_fft)
+inverted_fft = inverted_fft / np.max(np.abs(pattern_fft))
+pattern_fft = pattern_fft / np.max(np.abs(pattern_fft))
+
+
 differenz = np.abs(pattern_fft - inverted_fft)
 differenz[0,0] = 1
 differenz[0,1] = 0
 
 
 
-plots = {'inverted fft' : inverted_fft, 'original fft' : pattern_fft, 'trans' : trans[..., 0],
-         'original': pattern, 'inverted' : inverted, 'differenz' : differenz}
+plots = {'inverted fft' : inverted_fft, 'original fft' : pattern_fft, 'trans' : trans,
+         'original': pattern, 'inverted' : inverted, 'differenz' : differenz,
+         }
 
 
 
-fig, axes = plt.subplots(1, len(plots.keys()), figsize=(15, 5))
+fig, axes = plt.subplots(1, len(plots.keys()) + 2, figsize=(15, 5))
 
 
 for ax, img, title in zip(axes, plots.values(), plots.keys()):
+    print(title)
     ax.imshow(img, cmap='inferno')
     ax.set_title(title)
     #ax.axis('off')  # Turn off axis
-
+axes[-1].hist(pattern_fft.flatten())
+axes[-1].set_title('spectral distribution')
+axes[-2].hist(pattern.flatten(), bins=40)
+axes[-2].set_title('real distribution')
 
 print(f"ERROR in FFT: {np.average(np.abs(plots['inverted fft'] - plots['original fft']))}")
-print(f"ERROR in original: {np.average(np.abs(plots['inverted']-plots['original'])) / 128}")
+print(f"ERROR in original: {np.average(np.abs(plots['inverted']-plots['original']) / 255)}")
 plt.show()

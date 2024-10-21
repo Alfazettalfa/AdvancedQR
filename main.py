@@ -19,17 +19,6 @@ from markerlab import JapanPattern as Jap
 randomTransform(pattern=Jap())
 
 
-
-
-
-
-
-
-
-
-
-
-
 spectral = lambda a, b, size=100: (b - 1j*a) * size / 2          #für a*sin + b*cos
 
 size = 1000
