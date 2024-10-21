@@ -6,7 +6,7 @@ from markerlab import *
 from numpy.fft import *
 import obspy as ob
 from reconstructer import *
-def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_noise = True):
+def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_noise = False):
     if phi is None:
         α, β, γ = (np.random.rand(3) * 2 - 1) * np.array([max_inclination, max_inclination, np.pi])
     else:
@@ -43,13 +43,13 @@ k = 0
 
 #pattern = JapanPattern(size=size)
 pattern = getRandomFourier(size=size)
+pattern[:20, :20] = 0
 trans, corners = randomlyProjectPattern(pattern, max_inclination=np.pi/2.5, phi=(0.05, 0.05, 1.2), add_noise=False)
 pattern = pattern[..., 0]
-inverted = invertTransform(trans[..., 0], corners, size=size, interpolator= scipyBicubic)#lambda arr, y, x: SignalInterpol(arr, y, x, methode='hanning'))
+inverted = invertTransform(trans[..., 0], corners, size=size, interpolator= cubicInterpol)#lambda arr, y, x: SignalInterpol(arr, y, x, methode='hanning'))
 
 print('original average: ', np.average(pattern))
 print('inverted average: ', np.average(inverted))
-
 inverted_fft = rfft2(inverted, norm='forward')
 inverted_fft[:10, :10] = 0
 inverted_fft = inverted_fft / np.max(np.abs(inverted_fft))

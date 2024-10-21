@@ -90,7 +90,7 @@ def scipyBicubic(idx, data):
     print(interpolated_values)
     return interpolated_values
 
-def invertTransform(trans, corners, interpolator=scipyBicubic, size=None):
+def invertTransform(trans, corners, interpolator=cubicInterpol, size=None):
     """
     :param size:
     :param interpolator:
@@ -100,12 +100,14 @@ def invertTransform(trans, corners, interpolator=scipyBicubic, size=None):
     """
 
     def getCoordinateArray(size=size):
-        coordinates = np.zeros(shape=(size, size, 2))
         norm_x = corners[2] - corners[0]
         norm_y = corners[1] - corners[0]
         sizex, sizey = abs(betrag(corners[0] - corners[1])), abs(
             betrag(corners[0] - corners[2]))  # assumes square pattern
         size = int(max(sizey, sizex)) if size is None else size
+        coordinates = np.zeros(shape=(size, size, 2))
+        XX = np.linspace(start=0, stop=norm_x[0], num=size)
+        XY = np.linspace(start=0, stop=norm_x[1], num=size)
         for i in range(size):
             x = norm_x * i / size
             for j in range(size):
@@ -113,7 +115,38 @@ def invertTransform(trans, corners, interpolator=scipyBicubic, size=None):
                 p = x + y + corners[0]
                 coordinates[i, j, 0] = p[0]
                 coordinates[i, j, 1] = p[1]
-        return coordinates
+
+
+        norm_x = corners[2] - corners[0]
+        norm_y = corners[1] - corners[0]
+        sizex, sizey = abs(betrag(corners[0] - corners[1])), abs(
+            betrag(corners[0] - corners[2]))  # assumes square pattern
+        size = int(max(sizey, sizex)) if size is None else size
+
+        # Convert the corner points to numpy arrays
+        corner1 = corners[0]
+        corner2 = corners[1]
+        corner3 = corners[2]
+
+        # Calculate the vectors from corner1
+        v1 = corner2 - corner1  # Vector from corner1 to corner2
+        v2 = corner3 - corner1  # Vector from corner1 to corner3
+
+        t = np.linspace(0, 1, size)
+
+        # Create a grid of all combinations of u and v
+        u_grid, v_grid = np.meshgrid(t, t)
+        points = np.zeros(shape=(size,size,2))
+        for x in range(size):
+            for y in range(size):
+                points[x,y] = corner1 + t[x]*v1 + t[y]*v2
+        return points
+
+        # Calculate the points using vector addition and broadcasting
+        #points = corners[0] + np.outer(u_grid.ravel(), v1) + np.outer(v_grid.ravel(), v2)
+        #points = points.reshape(size, size, 2)
+        #print(np.average(np.abs(coordinates - points)))
+        return points
 
     indizes = getCoordinateArray(size=size)
     if interpolator != scipyBicubic:
