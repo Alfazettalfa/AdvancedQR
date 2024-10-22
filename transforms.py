@@ -6,7 +6,7 @@ from markerlab import *
 from numpy.fft import *
 import obspy as ob
 from reconstructer import *
-def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_noise = False):
+def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_noise = False, sigma=None):
     if phi is None:
         α, β, γ = (np.random.rand(3) * 2 - 1) * np.array([max_inclination, max_inclination, np.pi])
     else:
@@ -32,26 +32,28 @@ def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_n
     #back = np.astype(back, np.uint8)
     border = tform.params @ border
     border = border[:-1, ...].T
-    return back, border + (np.random.normal(scale=3, loc=0, size=border.shape) if add_noise else 0)
+    return back, border + (np.random.normal(scale=sigma, loc=0, size=border.shape) if add_noise else 0)
 
 
-size = 100
+size = 1200
 
 
 #pattern = JapanPattern(size=size)
 pattern, _ = getRandomFourier(size=size)
-trans, corners = randomlyProjectPattern(pattern, max_inclination=np.pi/2.5, phi=(0.05, 0.05, 1.2), add_noise=True)
+trans, corners = randomlyProjectPattern(pattern, max_inclination=np.pi/2.5, phi=(0.05, 0.05, 1.2), add_noise=False, sigma=1)
 inverted = invertTransform(trans, corners, size=size, interpolator= cubicInterpol)#lambda arr, y, x: SignalInterpol(arr, y, x, methode='hanning'))
 
 print('original average: ', np.average(pattern))
 print('inverted average: ', np.average(inverted))
 inverted_fft = rfft2(inverted, norm='forward')
 pattern_fft = rfft2(pattern, norm='forward')
-inverted_fft[:10, :10] = 0
-pattern_fft[:10, :10] = 0
-pattern_fft = np.real(pattern_fft)
-inverted_fft = np.real(inverted_fft)
-inverted_fft = inverted_fft / np.max(np.abs(pattern_fft))
+
+#inverted_fft[:10, :10] = 0
+#pattern_fft[:10, :10] = 0
+pattern_fft_copy = np.real(np.copy(pattern_fft/np.max(np.abs(pattern_fft))))
+pattern_fft = np.abs(pattern_fft)
+inverted_fft = np.abs(inverted_fft)
+inverted_fft = inverted_fft / np.max(np.abs(inverted_fft))
 pattern_fft = pattern_fft / np.max(np.abs(pattern_fft))
 
 
@@ -72,14 +74,14 @@ fig, axes = plt.subplots(1, len(plots.keys()) + 2, figsize=(15, 5))
 
 for ax, img, title in zip(axes, plots.values(), plots.keys()):
     print(title)
-    ax.imshow(img, cmap='inferno')
+    ax.imshow(img) #, cmap='inferno')
     ax.set_title(title)
     #ax.axis('off')  # Turn off axis
-axes[-1].hist(pattern_fft.flatten())
+axes[-1].hist(pattern_fft_copy.flatten())
 axes[-1].set_title('spectral distribution')
 axes[-2].hist(pattern.flatten(), bins=40)
 axes[-2].set_title('real distribution')
 
-print(f"ERROR in FFT: {np.average(np.abs(plots['inverted fft'] - plots['original fft']))}")
-print(f"ERROR in original: {np.average(np.abs(plots['inverted']-plots['original']) / 255)}")
+print(f"ERROR in FFT: {np.average(np.abs(plots['inverted fft'] - plots['original fft'])) / (2/3) * 100:4f}%")
+#print(f"ERROR in original: {(np.average(np.abs(plots['inverted']-plots['original']))):4f}")
 plt.show()

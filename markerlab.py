@@ -36,22 +36,16 @@ def getRandomFourier(size=250, set_freq_amplification=1):
                 ]
     from numpy.fft import irfft2, ifft2, rfft2, fft2
 
-    coefficients = (np.random.rand(size, size//2 + 1)) - (1j * np.random.rand(size, size//2 + 1))
-    coefficients[:,:] = 0
-    center = size // 2
-    s = size // 2 - 10
-    val = (np.random.rand(s*2, s)*2-1) + 1j * (np.random.rand(s*2, s)*2-1)
-    coefficients[center-s:center+s, center//2-s//2:center//2+s//2] = val
-    #coefficients = coefficients / np.max(np.abs(coefficients))
+    coefficients = (np.random.rand(size, size//2 + 1)*2-1) + 1j * (np.random.rand(size, size//2 + 1)*2-1)
+    coefficients = coefficients / np.max(np.abs(coefficients))
 
     """for u, v, val in set_freq:
         coefficients[u, v] = val / (1 + 3 + 1)**0.5 * set_freq_amplification"""
 
     arr = irfft2(coefficients, norm='forward')
-    #arr = arr - np.min(arr)
-    arr = arr / np.max(np.abs(arr)) * 255
-    #plt.imshow(l[-1], cmap='inferno')
-    #plt.show()
+    arr = arr / np.max(np.abs(arr))
+   # plt.imshow(arr)#, cmap='inferno')
+   # plt.show()
 
     return arr, coefficients
 
