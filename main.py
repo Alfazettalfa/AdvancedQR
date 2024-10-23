@@ -1,59 +1,80 @@
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
-from numpy import sin, cos
-import torch
-import torchvision
-import torchvision.transforms as transforms
-import os
-from matplotlib.image import imread
-import cv2
-from skimage import transform
-from numpy import sin, cos
-from numpy.random import rand
-from numpy.fft import *
-from scipy.fft import dctn, idctn, dstn, idstn
-from transforms import randomTransform
-from markerlab import JapanPattern as Jap
-
-randomTransform(pattern=Jap())
 
 
-spectral = lambda a, b, size=100: (b - 1j*a) * size / 2          #für a*sin + b*cos
-
-size = 1000
-hamming_x = np.hamming(size)
-hamming_y = np.hamming(size)
-hamming_2d = hamming_x[:, np.newaxis] * hamming_y[np.newaxis, :]
-
-x = np.linspace(start = 0, stop = 2 * np.pi, num = size)
-y = x[:, np.newaxis]
-
-
-
-X = x * np.ones(shape=y.shape)
-Y = y * np.ones(shape=x.shape)
+def cubic_kernel(t):
+    t = torch.abs(t)
+    return torch.where(
+        t <= 1,
+        (1.5 * t ** 3) - (2.5 * t ** 2) + 1,
+        torch.where(
+            t <= 2,
+            (-0.5 * t ** 3) + (2.5 * t ** 2) - (4 * t) + 2,
+            torch.zeros_like(t)
+        )
+    )
 
 
-f = 10*cos(5*X + 5*Y) + 10*sin(5*X + 20*Y)
-f = f# * hamming_2d
-a = rfft2(f)
+def cubicInterpol(data, y, x):
+    """
+    Perform cubic interpolation for 2D data using 2D floating-point arrays of coordinates (x, y).
+    Args:
+    - data (torch.Tensor): Input 2D data array.
+    - y (torch.Tensor): 2D array of y coordinates (floating-point values).
+    - x (torch.Tensor): 2D array of x coordinates (floating-point values).
 
-plots = {'real':np.real(a), 'imag':np.imag(a), 'original': f}
-fig, axes = plt.subplots(1, len(plots.keys()), figsize=(15, 5))
+    Returns:
+    - torch.Tensor: Interpolated values at the given (x, y) coordinates.
+    """
 
-for ax, img, title in zip(axes, plots.values(), plots.keys()):
-    ax.imshow(img, cmap='inferno')
-    ax.set_title(title)
-    ax.axis('off')  # Turn off axis
+    # Ensure x and y are tensors with requires_grad if needed
+    if not torch.is_tensor(x):
+        x = torch.tensor(x, requires_grad=True)
+    if not torch.is_tensor(y):
+        y = torch.tensor(y, requires_grad=True)
+
+    # Get the integer parts of the coordinates
+    x_int = torch.floor(x).long()  # Integer part of x
+    y_int = torch.floor(y).long()  # Integer part of y
+
+    # Get the fractional parts (for interpolation weights)
+    dx = x - x_int.float()
+    dy = y - y_int.float()
+
+    # Precompute the 16 neighboring indices for all points
+    neighbors_x = torch.stack([x_int + i for i in range(-1, 3)], dim=-1).clamp(0, data.shape[1] - 1)
+    neighbors_y = torch.stack([y_int + i for i in range(-1, 3)], dim=-1).clamp(0, data.shape[0] - 1)
+
+    # Gather the 16 neighboring values for all points
+    neighbor_values = torch.stack(
+        [data[neighbors_y[..., i], neighbors_x[..., j]] for i in range(4) for j in range(4)],
+        dim=-1
+    ).reshape(*x.shape, 4, 4)
+
+    # Compute weights for x and y using the cubic kernel
+    weights_x = torch.stack([cubic_kernel(dx - i) for i in range(-1, 3)], dim=-1)  # (*batch_size, 4)
+    weights_y = torch.stack([cubic_kernel(dy - i) for i in range(-1, 3)], dim=-1)  # (*batch_size, 4)
+
+    # Perform the weighted sum explicitly instead of using einsum
+    # First, apply weights along the x-dimension (columns)
+    weighted_x_sum = torch.zeros_like(dx)
+    for i in range(4):
+        for j in range(4):
+            weighted_x_sum += neighbor_values[..., i, j] * weights_x[..., i]
+
+    # Now apply weights along the y-dimension (rows)
+    interpolated_values = torch.zeros_like(dx)
+    for i in range(4):
+        interpolated_values += weighted_x_sum * weights_y[..., i]
+
+    return interpolated_values
 
 
-plt.show()
+# Example usage
+data = torch.randn(10, 10, requires_grad=True)  # Example 2D data
+x = torch.tensor([[4.2, 1.5], [3.3, 6.7]])  # Example x coordinates (2D)
+y = torch.tensor([[3.7, 5.5], [2.1, 4.4]])  # Example y coordinates (2D)
 
+result = cubicInterpol(data, y, x)
+#result.backward()  # This will compute gradients for 'data'
 
-
-
-
-
-
-
+print(result)

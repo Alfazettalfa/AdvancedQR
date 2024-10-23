@@ -22,7 +22,7 @@ def JapanPattern(size=250):
                #     pattern[i,j] = 0
     return pattern
 
-def getRandomFourier(size=250, set_freq_amplification=1):
+def getRandomFourier(size=250, set_freq_amplification=0.5):
     """
     :param set_freq_amplification: amplification factor of the preset frequencies
     :param siz e: size of the output array
@@ -39,13 +39,13 @@ def getRandomFourier(size=250, set_freq_amplification=1):
     coefficients = (np.random.rand(size, size//2 + 1)*2-1) + 1j * (np.random.rand(size, size//2 + 1)*2-1)
     coefficients = coefficients / np.max(np.abs(coefficients))
 
-    """for u, v, val in set_freq:
-        coefficients[u, v] = val / (1 + 3 + 1)**0.5 * set_freq_amplification"""
+    for u, v, val in set_freq:
+        coefficients[u, v] = val / (1 + 3 + 1)**0.5 * set_freq_amplification
 
     arr = irfft2(coefficients, norm='forward')
     arr = arr / np.max(np.abs(arr))
    # plt.imshow(arr)#, cmap='inferno')
-   # plt.show()
+    #plt.show()
 
     return arr, coefficients
 
