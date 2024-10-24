@@ -1,5 +1,11 @@
 import numpy as np
 from matplotlib import pyplot as plt
+import json
+
+with open("parameters.json", "r") as f:
+    data = json.load(f)
+# Convert the JSON data back to a list of tuples with complex numbers
+set_freq = [((item['x'], item['y']), complex(item['real'], item['imag'])) for item in data["orienting frequencies"]]
 
 def JapanPattern(size=250):
     pattern = np.zeros(shape=(size, size, 3), dtype=np.uint8)
@@ -29,21 +35,20 @@ def getRandomFourier(size=250, set_freq_amplification=0.5):
     :return: The inverse fourier transform of an array of size = size and uniformly distributed fourier coefficients
     """
 
-    set_freq = [(20, 20, 1 + 1j), (22, 20, 1 - 2j), (24, 20, 3 + 1j),
-                (22, 22, 1 + 3j), (20, 22, 2 - 1j), (20, 24, 2 + 1j),
-                (22, 24, 1 + 3j), (24, 22, 1 - 1j), (24, 24, 1 + 2j),
-                (25, 25, 1 + 1j), (22, 25, 1 - 2j), (25, 22, 1 + 2j)
-                ]
     from numpy.fft import irfft2, ifft2, rfft2, fft2
 
     coefficients = (np.random.rand(size, size//2 + 1)*2-1) + 1j * (np.random.rand(size, size//2 + 1)*2-1)
     coefficients = coefficients / np.max(np.abs(coefficients))
 
-    for u, v, val in set_freq:
+    for (u, v), val in set_freq:
         coefficients[u, v] = val / (1 + 3 + 1)**0.5 * set_freq_amplification
 
-    arr = irfft2(coefficients, norm='forward')
+    arr = irfft2(coefficients)#, norm='forward')
     arr = arr / np.max(np.abs(arr))
+    l = []
+    #for i in range(len(set_freq)):
+    #    print(coefficients[set_freq[i][0]] / coefficients[set_freq[0][0]])
+
    # plt.imshow(arr)#, cmap='inferno')
     #plt.show()
 

@@ -6,6 +6,22 @@ import torch
 
 betrag = lambda A: np.sqrt(sum(A**2))
 
+
+def draw_parallelogram(image, corners):
+    from PIL import Image, ImageDraw
+    #print(corners)
+    image = image + np.min(image)
+    image = image / np.max(image) * 100
+    image = np.astype(image, np.uint8)
+    if isinstance(image, np.ndarray):
+        image = Image.fromarray(image).convert("L")
+    draw = ImageDraw.Draw(image)
+    corners_array = np.array(corners)
+    fourth_corner = corners_array[2] + corners_array[1] - corners_array[0]
+    parallelogram_points = [tuple(corners_array[1]), tuple(corners_array[0]), tuple(corners_array[2]),
+                            tuple(fourth_corner)]
+    draw.polygon(parallelogram_points, outline="black", fill=None, width=1)
+    return image
 def getCoordinateArray(corners, size):
     norm_x = corners[2] - corners[0]
     norm_y = corners[1] - corners[0]
@@ -22,18 +38,16 @@ def getCoordinateArray(corners, size):
             coordinates[i, j, 1] = p[1]
     return coordinates
 
-def getCoordinateArrayTorch(corners, size, device):
+def getCoordinateArrayTorch(corners, size, device, return_numpy=False):
     # Convert corners to PyTorch tensors
-    corners = torch.tensor(corners, dtype=torch.float32, requires_grad=True).to(device)
+    if not torch.is_tensor(corners):
+        corners = torch.tensor(corners, dtype=torch.double, requires_grad=True).to(device)
 
     # Calculate the vectors along the edges
     norm_x = corners[2] - corners[0]  # Vector from corner 0 to corner 2
     norm_y = corners[1] - corners[0]  # Vector from corner 0 to corner 1
 
-    # Create a tensor to store coordinates (same shape as the original NumPy code)
-    coordinates = torch.zeros((size, size, 2), dtype=torch.float32, requires_grad=True).to(device)
-
-    # Loop over i and j to compute coordinates
+    coordinates = torch.zeros((size, size, 2), dtype=torch.double, requires_grad=False).to(device)
     for i in range(size):
         x = norm_x * i / size  # Calculate scaled x-component
         for j in range(size):
@@ -44,6 +58,23 @@ def getCoordinateArrayTorch(corners, size, device):
 
     return coordinates.numpy() if return_numpy else coordinates
 
+def getCoordinateArrayTorch_Vectorized(corners, size, device, return_numpy=False):
+    # Convert corners to PyTorch tensors
+    if not torch.is_tensor(corners):
+        corners = torch.tensor(corners, dtype=torch.double, requires_grad=True).to(device)
+
+    # Calculate the vectors along the edges
+    norm_x = corners[2] - corners[0]  # Vector from corner 0 to corner 2
+    norm_y = corners[1] - corners[0]  # Vector from corner 0 to corner 1
+
+    # Create a grid of coordinates scaled from 0 to 1
+    grid_x, grid_y = torch.meshgrid(torch.linspace(0, 1, size, dtype=torch.double, device=device),
+                                    torch.linspace(0, 1, size, dtype=torch.double, device=device), indexing='ij')
+
+    # Compute the coordinates using vectorized operations
+    coordinates = (grid_x.unsqueeze(-1) * norm_x + grid_y.unsqueeze(-1) * norm_y + corners[0]).to(device)
+
+    return coordinates.cpu().numpy() if return_numpy else coordinates
 def SignalInterpol(arr, y, x, a = 3, methode = 'hanning'):
     """
     interpoliert zwischen punkten auf einem array. Erhält die Frequenzen
@@ -126,17 +157,17 @@ def cubicInterpolTorch(data, y, x):
         )
     # Ensure x and y are tensors with requires_grad if needed
     if not torch.is_tensor(x):
-        x = torch.tensor(x, requires_grad=True)
+        x = torch.tensor(x, requires_grad=True, dtype=torch.double)
     if not torch.is_tensor(y):
-        y = torch.tensor(y, requires_grad=True)
+        y = torch.tensor(y, requires_grad=True, dtype=torch.double)
 
     # Get the integer parts of the coordinates
     x_int = torch.floor(x).long()  # Integer part of x
     y_int = torch.floor(y).long()  # Integer part of y
 
     # Get the fractional parts (for interpolation weights)
-    dx = x - x_int.float()
-    dy = y - y_int.float()
+    dx = x - x_int.double()
+    dy = y - y_int.double()
 
     # Precompute the 16 neighboring indices for all points
     neighbors_x = torch.stack([x_int + i for i in range(-1, 3)], dim=-1).clamp(0, data.shape[1] - 1)
@@ -156,6 +187,7 @@ def cubicInterpolTorch(data, y, x):
 
     # Apply weights along the x and y dimensions using matrix multiplication
     # First, apply the weights along the x-axis (columns), then along the y-axis (rows)
+    neighbor_values = neighbor_values.to(torch.double)
     weighted_x = torch.matmul(neighbor_values, weights_x.unsqueeze(-1))  # (*batch_size, 4, 1)
     interpolated_values = torch.matmul(weights_y.unsqueeze(-2), weighted_x).squeeze(-1).squeeze(-1)
 
@@ -193,7 +225,7 @@ def invertTransform(trans, corners, interpolator=cubicInterpol, size=None):
     else:
         return scipyBicubic(data=trans, idx=indizes)
 
-def getFourierCoefficientTorch(signal, target_freq_x, target_freq_y, device):
+def getFourierCoefficientTorch(signal, target_freq_x, target_freq_y, device='cpu'):
     """
     Calculate the Fourier coefficient for a specific target frequency in 2D from the input signal.
     Assumes equidistant sampling in both dimensions.
@@ -212,8 +244,8 @@ def getFourierCoefficientTorch(signal, target_freq_x, target_freq_y, device):
     M, N = signal.shape
 
     # Generate the indices for x and y directions (equidistant grid)
-    x = torch.linspace(0, M - 1, M, dtype=torch.float32, device=signal.device, requires_grad=True).to(device)
-    y = torch.linspace(0, N - 1, N, dtype=torch.float32, device=signal.device, requires_grad=True).to(device)
+    x = torch.linspace(0, M - 1, M, dtype=torch.double, device=signal.device, requires_grad=True).to(device)
+    y = torch.linspace(0, N - 1, N, dtype=torch.double, device=signal.device, requires_grad=True).to(device)
 
     # Create a meshgrid for x and y
     X, Y = torch.meshgrid(x, y, indexing='ij')
@@ -251,7 +283,7 @@ def getFourierCoefficient(signal, target_freq_x, target_freq_y):
     # Return the complex Fourier coefficient
     return real_part + 1j * imag_part
 
-def correctApproximation(raw_image, corners_approx, steps=20, size=100):
+def correctApproximation(raw_image, corners_approx, steps=300, size=100):
     """
     :param raw_image:
     :param corners_approx:
@@ -260,8 +292,11 @@ def correctApproximation(raw_image, corners_approx, steps=20, size=100):
     """
     import torch.fft
     import json
+    import torch.optim
 
-    device = device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = 'cpu'
+    print("device: ", device)
     with open("parameters.json", "r") as f:
         data = json.load(f)
     # Convert the JSON data back to a list of tuples with complex numbers
@@ -269,28 +304,46 @@ def correctApproximation(raw_image, corners_approx, steps=20, size=100):
     n_frequencies = len(set_freq)
     amplitudes = []
     frequencies = []
+    zero_amp = set_freq[0][1]
     for i in range(len(set_freq)):
-        amplitudes.append(set_freq[i][1] / set_freq[0][1])
+        amplitudes.append(set_freq[i][1])# / zero_amp)
         frequencies.append(set_freq[i][0])
-    amplitudes = torch.tensor(amplitudes, dtype=torch.complex64, requires_grad=True).to(device)
-    frequencies = torch.tensor(frequencies, dtype=torch.int, requires_grad=True).to(device)
-    raw_image = torch.tensor(raw_image, dtype=torch.float32, requires_grad=True).to(device)
-    corners = torch.tensor(corners, dtype=torch.float32, requires_grad=True).to(device)
+    amplitudes = torch.tensor(amplitudes, dtype=torch.complex128, requires_grad=False).to(device)
+    frequencies = torch.tensor(frequencies, dtype=torch.int, requires_grad=False).to(device)
+    raw_image = torch.tensor(raw_image, dtype=torch.double, requires_grad=False).to(device)
+
+    corners = torch.tensor(corners_approx, dtype=torch.double, requires_grad=True).to(device)
+    corners = torch.nn.Parameter(corners)
+    #optimizer = torch.optim.SGD([corners], lr=0.1)
+    optimizer = torch.optim.SGD([corners], lr=50)
 
     loss_fn = torch.nn.MSELoss()
-    optimizer = optim.Adam(corners[:-1], lr=0.01)
+
     for iter in range(steps):
-        idx_array = getCoordinateArrayTorch(corners_approx, size=size, device=device)
-        approx_data = cubicInterpolTorch(raw_image, x=indizes[...,0], y=indizes[...,1])
-        measured_frequencies = []
+        plt.imshow(draw_parallelogram(image=raw_image.detach().cpu().numpy(), corners=corners.detach().cpu().numpy()),
+                   cmap='nipy_spectral')
+        plt.show(block=False)
+        plt.pause(.1)
+        plt.cla()
+        idx_array = getCoordinateArrayTorch_Vectorized(corners, size=size, device=device)
+        approx_data = cubicInterpolTorch(raw_image, x=idx_array[...,0], y=idx_array[...,1])
+        measured_amplitudes = []
         for i in range(n_frequencies):
-            measured_frequencies.append(getFourierCoefficientTorch(signal=approx_data, target_freq_x=frequencies[i][0],
+            measured_amplitudes.append(getFourierCoefficientTorch(signal=approx_data, target_freq_x=frequencies[i][0],
                                       target_freq_y=frequencies[i][1], device=device))
-        measured_frequencies = torch.tensor(measured_frequencies, dtype=torch.complex64, requires_grad=True).to(device)
-        measured_frequencies = measured_frequencies / measured_frequencies[0]
+        measured_amplitudes = torch.stack(measured_amplitudes)  # Stacking to form a tensor
+        #zero_amp = measured_amplitudes[0]
+        #measured_amplitudes = measured_amplitudes / zero_amp
+
+        #print(measured_amplitudes.detach().cpu().numpy())
         optimizer.zero_grad()
-        loss = loss_fn(measured_frequencies, frequencies)
+        #loss = loss_fn(torch.real(measured_amplitudes), torch.real(amplitudes))
+        #loss = loss + loss_fn(torch.imag(measured_amplitudes), torch.imag(amplitudes))
+        loss = loss_fn(torch.angle(measured_amplitudes), torch.angle(amplitudes))
         loss.backward()
+        print("Iteration: ", iter ,"   loss: ", loss.detach().cpu().numpy())
+        print("corners: ",  corners.detach().cpu().numpy().flatten())
+        print("grad: ", corners.grad.detach().cpu().numpy().flatten())
         optimizer.step()
-        print(loss)
-        corners[-1] = corners[0] + corners[2] - corners[1]    #Corner of Parallelogramm, indices might be wrong!!!
+    corners = corners.detach().cpu().numpy()
+    return corners

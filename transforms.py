@@ -9,7 +9,7 @@ from reconstructer import *
 import json
 
 np.random.seed(42872362)
-def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_noise = False, sigma=None):
+def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_noise = False, sigma=3):
     if phi is None:
         α, β, γ = (np.random.rand(3) * 2 - 1) * np.array([max_inclination, max_inclination, np.pi])
     else:
@@ -38,39 +38,36 @@ def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_n
     return back, border + (np.random.normal(scale=sigma, loc=0, size=border.shape) if add_noise else 0)
 
 
-size = 100
+size = 500
 
 
 #pattern = JapanPattern(size=size)[..., 0]
 pattern, original_coeff = getRandomFourier(size=size)
-trans, corners = randomlyProjectPattern(pattern, max_inclination=np.pi/2.5, phi=(0.05, 0.05, 1.2), add_noise=False, sigma=1)
+#print(rfft2(pattern)[20,20] / rfft2(pattern)[5,5])
+#print(original_coeff[20,20] / original_coeff[5,5])
+trans, corners = randomlyProjectPattern(pattern, max_inclination=np.pi/2.5, phi=(0.05, 0.05, 1.2), add_noise=True, sigma=20)
+corners = correctApproximation(raw_image=trans, corners_approx=corners, size=size)
 inverted = invertTransform(trans, corners, size=size, interpolator= cubicInterpolTorch)#lambda arr, y, x: SignalInterpol(arr, y, x, methode='hanning'))
 
-print('original average: ', np.average(pattern))
-print('inverted average: ', np.average(inverted))
+
 inverted_fft = rfft2(inverted, norm='forward')
 pattern_fft = rfft2(pattern, norm='forward')
-
 pattern_fft_copy = np.real(np.copy(inverted_fft/np.max(np.abs(inverted_fft))))
-pattern_fft = np.abs(pattern_fft)
-inverted_fft = np.abs(inverted_fft)
-inverted_fft = inverted_fft / np.max(np.abs(inverted_fft))
-pattern_fft = pattern_fft / np.max(np.abs(pattern_fft))
 
-differenz = np.abs(pattern_fft - inverted_fft)
+
+differenz = np.abs(pattern_fft / inverted_fft)
 differenz[0,0] = 1
 differenz[0,1] = 0
 
 
-plots = {'inverted fft' : inverted_fft, 'original fft' : pattern_fft, 'trans' : trans,
-         'original': pattern, 'inverted' : inverted, 'differenz' : differenz,
+plots = {'inverted fft' : np.real(inverted_fft) / np.max(np.abs(inverted_fft)), 'original fft' : np.real(pattern_fft) / np.max(np.abs(inverted_fft)),
+         'trans' : trans, 'original': pattern, 'inverted' : inverted, 'differenz' : differenz,
          }
 
 with open("parameters.json", "r") as f:
     data = json.load(f)
 # Convert the JSON data back to a list of tuples with complex numbers
 set_freq = [((item['x'], item['y']), complex(item['real'], item['imag'])) for item in data["orienting frequencies"]]
-print(set_freq)
 n_frequencies = len(set_freq)
 amplitudes = []
 frequencies = []
@@ -80,19 +77,23 @@ for i in range(len(set_freq)):
 
 measured_frequencies = []
 for i in range(n_frequencies):
-    print(frequencies[i][0], frequencies[i][1])
-    measured_frequencies.append(getFourierCoefficient(signal=inverted, target_freq_x=frequencies[i][0],
+    measured_frequencies.append(getFourierCoefficientTorch(signal=inverted, target_freq_x=frequencies[i][0],
                             target_freq_y=frequencies[i][1]))
+
+zero = measured_frequencies[0]
+for i in range(len(measured_frequencies)):
+    measured_frequencies[i] = measured_frequencies[i] / zero
+
+
 print("Baseline: ", amplitudes)
-print("Inverted: ", measured_frequencies)
+print("Inverted: ", [f"{complex(a):2f}" for a in measured_frequencies])
 
 
 fig, axes = plt.subplots(1, len(plots.keys()) + 2, figsize=(15, 5))
 
 
 for ax, img, title in zip(axes, plots.values(), plots.keys()):
-    print(title)
-    ax.imshow(img) #, cmap='inferno')
+    ax.imshow(img, cmap='nipy_spectral')
     ax.set_title(title)
     #ax.axis('off')  # Turn off axis
 axes[-1].hist(pattern_fft_copy.flatten(), bins=40)
