@@ -10,7 +10,7 @@ import json
 from models import *
 
 #np.random.seed(42872362)
-
+a = 10
 size = 400
 
 #runTroughModel(source="FourierDataset\\train_images\\water_body_43.jpg")
