@@ -34,31 +34,39 @@ def getRandomFourier(size=250, set_freq_amplification=0.5):
     :param siz e: size of the output array
     :return: The inverse fourier transform of an array of size = size and uniformly distributed fourier coefficients
     """
-
     from numpy.fft import irfft2, ifft2, rfft2, fft2
 
     coefficients = (np.random.rand(size, size//2 + 1)*2-1) + 1j * (np.random.rand(size, size//2 + 1)*2-1)
     coefficients = coefficients / np.max(np.abs(coefficients))
-
-    for (u, v), val in set_freq:
-        coefficients[u, v] = val / (1 + 3 + 1)**0.5 * set_freq_amplification
+    if set_freq_amplification:
+        for (u, v), val in set_freq:
+            coefficients[u, v] = val / (1 + 3 + 1)**0.5 * set_freq_amplification
 
     arr = irfft2(coefficients)#, norm='forward')
     arr = arr / np.max(np.abs(arr))
     l = []
-    #for i in range(len(set_freq)):
-    #    print(coefficients[set_freq[i][0]] / coefficients[set_freq[0][0]])
-
-   # plt.imshow(arr)#, cmap='inferno')
-    #plt.show()
-
     return arr, coefficients
 
 
+def RandomFourierwBorder(size=400):
+    """
+    :return: Wrapper for getRandomFourier. Adds a border
+    """
+    border = 5 #border in % of Image
+    offset = int(size * border / 100) // 4
+    pattern = np.dstack([getRandomFourier(size=size - offset * 4, set_freq_amplification=False)[0][..., np.newaxis] for _ in range(3)])
+    for i in [0, 1, 2]:
+        pattern[..., i] = pattern[..., i] - np.min(pattern[..., i])
+        pattern[..., i] = pattern[..., i] / np.max(pattern[..., i])
+    extended = np.zeros(shape=(size, size, 3), dtype=float) + np.array([153, 50, 204])/255
+    extended[offset:size-offset, offset:size-offset, :] = np.average(axis=(0,1), a=pattern)
+    extended[offset * 2:size-offset * 2, offset * 2:size-offset * 2, :] = pattern
+    extended = np.astype(extended * 255, np.uint8)
 
+    return extended
 
- #plt.imshow(getRandomFourier(), cmap='inferno')
-#plt.show()
+RandomFourierwBorder()
+
 
 
 

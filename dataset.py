@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 from numpy import sin, cos
 from numpy.random import normal
@@ -6,7 +7,7 @@ import os
 from matplotlib.image import imread
 import cv2
 from skimage import transform
-from markerlab import JapanPattern
+from markerlab import *
 
 def renderBackground(target, resolution = (1125, 2436)):
     target = cv2.resize(target, dsize=resolution, interpolation=cv2.INTER_CUBIC)
@@ -35,9 +36,10 @@ def getMarkerDataset(pattern=None, klein = ""):
     if pattern is None: pattern = np.random.randint(low=0, high=255, size=(130, 130, 3))
     Input, Output, binMasked = [], [], []
     cnt = -1
+    cnt2 = 0
     for l in os.listdir("Images" + klein):
         cnt += 1
-        print(cnt)
+        print(cnt + cnt2)
         img = np.asarray(imread("Images" + klein + "//" + l))
         img = img.__copy__()
         if img.shape[-1] == 4:
@@ -73,12 +75,21 @@ def getMarkerDataset(pattern=None, klein = ""):
 
     print("----------------------SAVED------------------------------")
 
-def externDataset(pattern=None, klein = "", test_split = 600):
-    #test_split = int(test_split * len([filename for filename in os.listdir("Images" + klein)]))
+def externDataset(pattern_function=None, klein = False, test_split = 600, repeats = 4, Folder = 'extern_dataset'):
+    """
+    :param pattern_function: Function that returns pattern to be projected
+    :param Folder:
+    :param klein: Should Images come from the ImagesKlein Folder
+    :param test_split:
+    :param repeats: How often should each Image be usef
+    :return: populates the folder extern_dataset with a dataset, given the images in the
+    "Images" folder and the pattern provided to the function
+    """
+    klein = 'Klein' if klein else ''
     for f in ['train_images', 'train_masks', 'valid_images', 'valid_masks']:  #delete old dataset if it exists
         import shutil
         from PIL import Image
-        folder = 'extern_dataset/' + f
+        folder = Folder + '/' + f
         for filename in os.listdir(folder):
             file_path = os.path.join(folder, filename)
             try:
@@ -88,60 +99,55 @@ def externDataset(pattern=None, klein = "", test_split = 600):
                     shutil.rmtree(file_path)
             except Exception as e:
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
-    cnt = -1
     fig = None
-    for l in os.listdir("Images" + klein):
-        cnt += 1
-        train_test = 'valid' if cnt > test_split else 'train'
-        print(cnt)
-        img = np.asarray(imread("Images" + klein + "//" + l))
-        img = img.__copy__()
-        if np.average(img) < 10:
-            continue
-        if img.shape[-1] == 4:
-            img = img[...,:-1]
-        if min(img.shape[:-1]) < 500: continue
+    cnt2 = 0
+    for rep in range(repeats):
+        cnt = -1
+        for l in os.listdir("Images" + klein):
+            pattern = pattern_function()
+            cnt += 1
+            train_test = 'valid' if cnt > test_split else 'train'
+            print("Image Nr: ", cnt)
+            img = np.asarray(imread("Images" + klein + "//" + l))
+            img = img.__copy__()
+            if np.average(img) < 10:
+                continue
+            if img.shape[-1] == 4:
+                img = img[...,:-1]
+            if min(img.shape[:-1]) < 500: continue  #Bicubic does not work with extreme upscaling
 
-        border = np.array([[0, 0, 1], [pattern.shape[0], 0, 1], [0, pattern.shape[1], 1],
-                           [pattern.shape[0], pattern.shape[1], 1]]).T
-        tform = getRandomTransform(img, pattern)
-        new_border = tform.params @ border
-        while any(max(new_border[k]) >= img.shape[1-k] or min(new_border[k]) < 0 for k in [0,1]):
+            border = np.array([[0, 0, 1], [pattern.shape[0], 0, 1], [0, pattern.shape[1], 1],
+                               [pattern.shape[0], pattern.shape[1], 1]]).T
             tform = getRandomTransform(img, pattern)
             new_border = tform.params @ border
+            while any(max(new_border[k]) >= img.shape[1-k] or min(new_border[k]) < 0 for k in [0,1]):
+                tform = getRandomTransform(img, pattern)
+                new_border = tform.params @ border
 
-        background = np.zeros(shape=img.shape, dtype=int)
-        background[0:pattern.shape[0], 0:pattern.shape[1]] = pattern
-        white_background = np.zeros(shape=img.shape, dtype=int)
-        white_background[0:pattern.shape[0], 0:pattern.shape[1]] = 255
-        marked = transform.warp(background, tform.inverse, preserve_range=True, order=1)
-        marked = np.ndarray.astype(marked, np.uint8)
-        white_marked = transform.warp(white_background, tform.inverse, preserve_range=True, order=1)
+            background = np.zeros(shape=img.shape, dtype=int)
+            background[0:pattern.shape[0], 0:pattern.shape[1]] = pattern
+            white_background = np.zeros(shape=img.shape, dtype=int)
+            white_background[0:pattern.shape[0], 0:pattern.shape[1]] = 255
+            marked = transform.warp(background, tform.inverse, preserve_range=True, order=1)
+            marked = np.ndarray.astype(marked, np.uint8)
+            white_marked = transform.warp(white_background, tform.inverse, preserve_range=True, order=1)
 
-        image = np.where(np.greater(white_marked, 0), marked, img)
-        image = np.astype(image, float) + normal(loc=0, scale=0.5, size=image.shape)
-        image = np.astype(image, np.uint8)
-        white_marked = np.astype(white_marked, np.uint8)
-        """if not fig : fig = plt.figure(figsize=(10, 10))
-        fig.add_subplot(1, 2, 1)
-        plt.imshow(image)
-        fig.add_subplot(1, 2, 2)
-        plt.imshow(white_marked)
-        plt.show(block=False)
-        plt.pause(0.1)
-        plt.cla()"""
-
-        white_marked = Image.fromarray(white_marked)
-        image = Image.fromarray(image)
-        image.save(fp="extern_dataset/" + train_test + "_images/" + "water_body_" + str(cnt) + ".jpg")
-        white_marked.save(fp="extern_dataset/" + train_test + "_masks/" + "water_body_" + str(cnt) + ".jpg")
+            image = np.where(np.greater(white_marked, 0), marked, img)
+            image = np.astype(image, float) + normal(loc=0, scale=0.5, size=image.shape)
+            image = np.astype(image, np.uint8)
+            white_marked = np.astype(white_marked, np.uint8)
+            white_marked = Image.fromarray(white_marked)
+            image = Image.fromarray(image)
+            image.save(fp=Folder + '/' + train_test + "_images/" + "water_body_" + str(cnt + cnt2) + ".jpg")
+            white_marked.save(fp=Folder + '/' + train_test + "_masks/" + "water_body_" + str(cnt + cnt2) + ".jpg")
+        cnt2 += cnt
 
 
 
 
 
 if __name__ == '__main__':
-    externDataset(pattern=JapanPattern(size=(400, 400, 3)))
+    externDataset(pattern_function=RandomFourierwBorder, Folder="FourierDataset", repeats=8)              #pattern=JapanPattern(size=(400, 400, 3)))
 
 
 

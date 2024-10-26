@@ -7,46 +7,35 @@ from numpy.fft import *
 import obspy as ob
 from reconstructer import *
 import json
+from models import *
 
-np.random.seed(42872362)
-def randomlyProjectPattern(pattern, max_inclination = np.pi/5, phi = None, add_noise = False, sigma=3):
-    if phi is None:
-        α, β, γ = (np.random.rand(3) * 2 - 1) * np.array([max_inclination, max_inclination, np.pi])
-    else:
-        α, β, γ = phi
-    rotation = np.array([
-        [cos(β) * cos(γ), sin(α) * sin(β) * cos(γ) - cos(α) * sin(γ), 0],
-        [cos(β) * sin(γ), sin(α) * sin(β) * sin(γ) + cos(α) * cos(γ), 0],
-        [0, 0, 1]
-    ])
+#np.random.seed(42872362)
 
-    back = np.zeros(shape=(pattern.shape[0]*3, pattern.shape[1]*3))
-    back[pattern.shape[0]*1:pattern.shape[0]*2, pattern.shape[1]*1:pattern.shape[1]*2] = pattern
-    #back = np.astype(back, np.uint8)
-    border = np.array([[pattern.shape[0]*1,pattern.shape[1]*1, 1], [pattern.shape[0]*2, pattern.shape[1]*1, 1],
-                       [pattern.shape[0]*1, pattern.shape[1]*2, 1]]).T
+size = 400
 
-    rotation = transform.EuclideanTransform(matrix=rotation)
-    shift = transform.EuclideanTransform(translation=-np.array(back.shape[:2]) / 2)
-    scale = transform.SimilarityTransform(scale= np.random.rand() + 1)
-    matrix = np.linalg.inv(shift.params) @ rotation.params @ scale.params @ shift.params
-    tform = transform.EuclideanTransform(matrix)
-    back = transform.warp(back, tform.inverse, preserve_range=True, order=1)
-    #back = np.astype(back, np.uint8)
-    border = tform.params @ border
-    border = border[:-1, ...].T
-    return back, border + (np.random.normal(scale=sigma, loc=0, size=border.shape) if add_noise else 0)
-
-
-size = 500
-
+#runTroughModel(source="FourierDataset\\train_images\\water_body_43.jpg")
 
 #pattern = JapanPattern(size=size)[..., 0]
-pattern, original_coeff = getRandomFourier(size=size)
-#print(rfft2(pattern)[20,20] / rfft2(pattern)[5,5])
-#print(original_coeff[20,20] / original_coeff[5,5])
-trans, corners = randomlyProjectPattern(pattern, max_inclination=np.pi/2.5, phi=(0.05, 0.05, 1.2), add_noise=True, sigma=20)
-corners = correctApproximation(raw_image=trans, corners_approx=corners, size=size)
+pattern, original_coeff = getRandomFourier(size=size, RGB=True)
+pattern = pattern - np.min(pattern)
+pattern = pattern / np.max(pattern) * 255
+print(np.mean(pattern, axis=(0, 1)))
+print(np.std(pattern, axis=(0,1)))
+
+
+
+trans, corners = randomlyProjectPattern(pattern, max_inclination=np.pi/2.5, phi=(0.05, 0.05, 1.2), add_noise=False, sigma=20)
+
+p2 = trans.copy()
+r = np.random.rand(*p2.shape) * 255
+p2 = np.where(np.less(p2, 1), r, p2)
+p2 = np.astype(p2, np.uint8)
+p2 = np.dstack((p2[..., np.newaxis], p2[..., np.newaxis], p2[..., np.newaxis]))
+plt.imshow(p2)
+plt.show()
+gaussKernel(p2)
+
+#corners = correctApproximation(raw_image=trans, corners_approx=corners, size=size)
 inverted = invertTransform(trans, corners, size=size, interpolator= cubicInterpolTorch)#lambda arr, y, x: SignalInterpol(arr, y, x, methode='hanning'))
 
 
@@ -55,7 +44,8 @@ pattern_fft = rfft2(pattern, norm='forward')
 pattern_fft_copy = np.real(np.copy(inverted_fft/np.max(np.abs(inverted_fft))))
 
 
-differenz = np.abs(pattern_fft / inverted_fft)
+differenz = np.abs(np.abs(pattern_fft)) - np.abs(inverted_fft)
+differenz = differenz/np.max(np.abs(differenz))
 differenz[0,0] = 1
 differenz[0,1] = 0
 
@@ -93,7 +83,7 @@ fig, axes = plt.subplots(1, len(plots.keys()) + 2, figsize=(15, 5))
 
 
 for ax, img, title in zip(axes, plots.values(), plots.keys()):
-    ax.imshow(img, cmap='nipy_spectral')
+    ax.imshow(img, cmap='inferno')
     ax.set_title(title)
     #ax.axis('off')  # Turn off axis
 axes[-1].hist(pattern_fft_copy.flatten(), bins=40)
