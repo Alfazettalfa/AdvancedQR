@@ -48,7 +48,7 @@ def getRandomFourier(size=250, set_freq_amplification=0.5):
     return arr, coefficients
 
 
-def RandomFourierwBorder(size=400):
+def getRandomFourierwBorder(size=400):
     """
     :return: Wrapper for getRandomFourier. Adds a border
     """
@@ -62,10 +62,7 @@ def RandomFourierwBorder(size=400):
     extended[offset:size-offset, offset:size-offset, :] = np.average(axis=(0,1), a=pattern)
     extended[offset * 2:size-offset * 2, offset * 2:size-offset * 2, :] = pattern
     extended = np.astype(extended * 255, np.uint8)
-
     return extended
-
-RandomFourierwBorder()
 
 
 

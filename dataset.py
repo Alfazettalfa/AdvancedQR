@@ -143,11 +143,16 @@ def externDataset(pattern_function=None, klein = False, test_split = 600, repeat
         cnt2 += cnt
 
 
-
+def generateImageWithKnownborders(pattern, image="Images/bike_350.bmp"):
+    from models import randomlyProjectPattern
+    img = np.asarray(imread(image)) if isinstance(image, str) else image
+    pattern, corners = randomlyProjectPattern(pattern=pattern, add_noise=False, RGB=True)
+    img = renderBackground(target=img, resolution=pattern.shape[:-1])
+    return np.where(np.greater(pattern, 1), pattern, img), corners
 
 
 if __name__ == '__main__':
-    externDataset(pattern_function=RandomFourierwBorder, Folder="FourierDataset", repeats=8)              #pattern=JapanPattern(size=(400, 400, 3)))
+    externDataset(pattern_function=getRandomFourierwBorder, Folder="FourierDataset", repeats=8)
 
 
 

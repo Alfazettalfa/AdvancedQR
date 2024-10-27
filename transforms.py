@@ -8,15 +8,18 @@ import obspy as ob
 from reconstructer import *
 import json
 from models import *
+from dataset import generateImageWithKnownborders
 
-#np.random.seed(42872362)
-a = 10
+np.random.seed(42872362)
+
 size = 400
-
+pattern = getRandomFourierwBorder(size=size)
+generateImageWithKnownborders(pattern=pattern)
 #runTroughModel(source="FourierDataset\\train_images\\water_body_43.jpg")
 
+
 #pattern = JapanPattern(size=size)[..., 0]
-pattern, original_coeff = getRandomFourier(size=size, RGB=True)
+pattern, original_coeff = getRandomFourier(size=size)#, RGB=True)
 pattern = pattern - np.min(pattern)
 pattern = pattern / np.max(pattern) * 255
 print(np.mean(pattern, axis=(0, 1)))
